@@ -1,0 +1,169 @@
+---
+title: "2023-03-11 Tips"
+author: "Chun Yu, Ko"
+date: "2023-03-11"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    toc: true
+    toc_depth: 4
+---
+
+# Environment Setting
+```{r, warning=FALSE, warning=FALSE}
+suppressMessages({
+  library(data.table)
+  library(dplyr)
+  library(plotly)
+  library(abn)
+})
+```
+
+# Data Acquisition
+```{r, warning=FALSE, warning=FALSE}
+
+var_path <- "data/20230311_tips.csv"
+
+data <- var_path %>% fread()
+```
+
+# Pre-proccess
+```{r, warning=FALSE, warning=FALSE}
+data <- data %>% mutate(
+  sex = sex %>% factor(., c("Female", "Male")),
+  smoker = smoker %>% factor(., c("No", "Yes")),
+  day = day %>% factor(., c("Thur", "Fri", "Sat", "Sun")),
+  time = time %>% factor(., c("Lunch", "Dinner"))
+)
+```
+
+## Check Data 
+```{r, warning=FALSE, warning=FALSE}
+data %>% skimr::skim()
+```
+
+# Visualization
+
+## 3D Scatter
+
+### tip ~ size + total_bill
+
+```{r, warning=FALSE, warning=FALSE}
+data %>%
+  plot_ly(x = ~size, y = ~total_bill, z = ~tip, type = "scatter3d", mode = "markers")
+```
+
+### tip ~ size + total_bill + smoker
+
+```{r, warning=FALSE, warning=FALSE}
+data %>%
+  plot_ly(x = ~size, y = ~total_bill, z = ~tip, color = ~smoker, type = "scatter3d", mode = "markers")
+```
+
+## Scatter with lm
+
+### tip ~ size + total_bill + day +smoker + sex
+
+```{r, warning=FALSE, warning=FALSE}
+ggplotly(
+  data %>%
+    mutate(
+      day = day %>% paste("day =", .),
+      smoker = smoker %>% paste("smoker =", .)
+    ) %>%
+    ggplot(aes(x = total_bill, y = tip, color = sex)) +
+    geom_smooth(method = "lm", se = F, size = .5, linetype = 2, formula = ~"y ~ x") +
+    geom_point(alpha = .8) +
+    facet_wrap(smoker ~ day, ncol = 4, scales = "free") +
+    scale_x_continuous(labels = scales::label_comma()) +
+    scale_y_continuous(labels = scales::label_comma()) +
+    colorspace::scale_color_discrete_diverging("Green-Orange") +
+    colorspace::scale_fill_discrete_diverging("Green-Orange") +
+    ggthemes::theme_fivethirtyeight() +
+    theme(legend.position = "bottom")
+)
+```
+
+## Box plot
+
+### Scatter with lm: tip ~ total_bill + day + sex
+
+```{r, warning=FALSE, warning=FALSE}
+ggplotly(data %>%
+  mutate(
+    day = day %>% paste("day =", .),
+    smoker = smoker %>% paste("smoker =", .)
+  ) %>%
+  ggplot(aes(x = sex, y = tip, color = sex)) +
+  geom_boxplot() +
+  facet_wrap(~day, ncol = 4, scales = "free") +
+  scale_y_continuous(labels = scales::label_comma()) +
+  colorspace::scale_color_discrete_diverging("Green-Orange") +
+  colorspace::scale_fill_discrete_diverging("Green-Orange") +
+  ggthemes::theme_fivethirtyeight() +
+  theme(legend.position = "bottom"))
+```
+
+# Hypothesis testing
+
+## Structure Discover
+
+```{r, warning=FALSE, warning=FALSE}
+
+data_abn <- data %>%
+  mutate(day = forcats::fct_recode(day, "Weekday" = "Thur", "Weekday" = "Fri", "Weekend" = "Sat", "Weekend" = "Sun")) %>%
+  mutate_at(.vars = c("total_bill", "tip"), ~ log(.)) %>%
+  data.frame()
+
+data.dists <- list(
+  "total_bill" = "gaussian",
+  "tip" = "gaussian",
+  "sex" = "binomial",
+  "smoker" = "binomial",
+  "day" = "binomial",
+  "time" = "binomial",
+  "size" = "gaussian"
+)
+
+data_abn %>%
+  buildScoreCache(data.df = ., data.dists = data.dists, max.parents = 1) %>%
+  mostProbable() %>%
+  fitAbn() %>%
+  plot()
+```
+
+## Regression
+
+```{r, warning=FALSE, warning=FALSE}
+list_model <- c("total_bill", "size", "total_bill + size") %>%
+  paste("tip ~", .) %>%
+  c(., "size ~ total_bill") %>%
+  lapply(., as.formula) %>%
+  lapply(., function(x) {
+    glm(data = data_abn, formula = x)
+  })
+
+suppressMessages({
+  list_model %>%
+    jtools::export_summs(.,
+      error_format = "[{conf.low}, {conf.high}]",
+      model.names = c("total bill", "size", "both", "size by total bill")
+    )
+})
+```
+
+### Plot model fitness
+
+#### total_bill
+
+```{r, warning=FALSE, warning=FALSE}
+par(mfrow = c(2, 2))
+list_model[[1]]%>%plot()
+```
+
+#### both
+
+```{r, warning=FALSE, warning=FALSE}
+par(mfrow = c(2, 2))
+list_model[[3]]%>%plot()
+```
