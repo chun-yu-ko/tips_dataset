@@ -25,7 +25,6 @@ suppressMessages({
 var_path <- "data/20230311_tips.csv"
 
 data <- var_path %>% fread()
-
 ```
 
 # Pre-proccess
@@ -126,8 +125,15 @@ data.dists <- list(
   "size" = "gaussian"
 )
 
+
+dag.banned <- matrix(0, ncol(data_abn), ncol(data_abn), dimnames = list(names(data.dists), names(data.dists)))
+
+dag.banned["size", "total_bill"] <- 1
+dag.banned["total_bill", "tip"] <- 1
+dag.banned["size", "tip"] <- 1
+
 data_abn %>%
-  buildScoreCache(data.df = ., data.dists = data.dists, max.parents = 1) %>%
+  buildScoreCache(data.df = ., data.dists = data.dists, max.parents = 1, dag.banned = dag.banned) %>%
   mostProbable() %>%
   fitAbn() %>%
   plot()
@@ -138,7 +144,7 @@ data_abn %>%
 ```{r, warning=FALSE, warning=FALSE}
 list_model <- c("total_bill", "size", "total_bill + size") %>%
   paste("tip ~", .) %>%
-  c(., "size ~ total_bill") %>%
+  c(., "total_bill ~ size") %>%
   lapply(., as.formula) %>%
   lapply(., function(x) {
     glm(data = data_abn, formula = x)
@@ -148,7 +154,7 @@ suppressMessages({
   list_model %>%
     jtools::export_summs(.,
       error_format = "[{conf.low}, {conf.high}]",
-      model.names = c("total bill", "size", "both", "size by total bill")
+      model.names = c("total bill", "size", "both", "total bill by size size")
     )
 })
 ```
@@ -159,12 +165,19 @@ suppressMessages({
 
 ```{r, warning=FALSE, warning=FALSE}
 par(mfrow = c(2, 2))
-list_model[[1]]%>%plot()
+list_model[[1]] %>% plot()
 ```
 
 #### both
 
 ```{r, warning=FALSE, warning=FALSE}
 par(mfrow = c(2, 2))
-list_model[[3]]%>%plot()
+list_model[[3]] %>% plot()
+```
+
+```{r}
+model_mediate = mediation::mediate(model.m = list_model[[4]], model.y = list_model[[3]],
+                                   treat = "size", mediator = "total_bill")
+model_mediate%>%summary
+model_mediate%>%plot
 ```
