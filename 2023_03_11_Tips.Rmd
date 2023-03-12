@@ -25,6 +25,7 @@ suppressMessages({
 var_path <- "data/20230311_tips.csv"
 
 data <- var_path %>% fread()
+
 ```
 
 # Pre-proccess
@@ -72,7 +73,7 @@ ggplotly(
       smoker = smoker %>% paste("smoker =", .)
     ) %>%
     ggplot(aes(x = total_bill, y = tip, color = sex)) +
-    geom_smooth(method = "lm", se = F, size = .5, linetype = 2, formula = ~"y ~ x") +
+    geom_smooth(method = "lm", se = F, size = .5, linetype = 2, formula = "y ~ x") +
     geom_point(alpha = .8) +
     facet_wrap(smoker ~ day, ncol = 4, scales = "free") +
     scale_x_continuous(labels = scales::label_comma()) +
